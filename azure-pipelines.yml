@@ -1,0 +1,51 @@
+# Setting up run triggers
+# Run only for changes in the master branch
+trigger:
+- master
+
+# Since the installation of random software in virtual machines  
+# is prohibited, we'll use a Docker container, 
+# launched on a virtual machine with Windows Server 1803
+pool:
+  vmImage: 'win1803'
+container: microsoft/dotnet-framework:4.7.2-sdk-windowsservercore-1803
+           
+steps:
+# Download the analyzer distribution
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: 'Invoke-WebRequest 
+               -Uri https://files.viva64.com/PVS-Studio_setup.exe 
+               -OutFile PVS-Studio_setup.exe'
+- task: CmdLine@2
+  inputs:
+    workingDirectory: $(System.DefaultWorkingDirectory)
+    script: |
+# Restore the project and download dependencies
+      nuget restore .\ShareX.sln
+# Create the directory, where files with analyzer reports will be saved
+      md .\PVSTestResults
+# Install the analyzer
+      PVS-Studio_setup.exe /VERYSILENT /SUPPRESSMSGBOXES 
+/NORESTART /COMPONENTS=Core
+#  Create the file with configuration and license information
+         "C:\Program Files (x86)\PVS-Studio\PVS-Studio_Cmd.exe" 
+          credentials 
+    -u $(PVS_USERNAME) 
+    -n $(PVS_KEY)
+
+# Run the static analyzer and convert the report in html. 
+    "C:\Program Files (x86)\PVS-Studio\PVS-Studio_Cmd.exe" 
+         -t .\ShareX.sln  
+         -o .\PVSTestResults\ShareX.plog
+      "C:\Program Files (x86)\PVS-Studio\PlogConverter.exe" 
+         -t html 
+         -o .\PVSTestResults\ 
+         .\PVSTestResults\ShareX.plog
+    
+# Save analyzer reports
+- task: PublishBuildArtifacts@1
+  inputs:
+    pathToPublish: PVSTestResults
+    artifactName: PVSTestResults
